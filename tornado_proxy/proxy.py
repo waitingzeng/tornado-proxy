@@ -27,14 +27,20 @@
 
 import sys
 import socket
+import logging
 
 import tornado.httpserver
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
 import tornado.httpclient
+from tornado.options import options, define, parse_command_line
 
 __all__ = ['ProxyHandler', 'run_proxy']
+
+define('port', default=8080, type=int)
+define('addr', default='0.0.0.0', type=str)
+define('ip_router', default=False, type=bool)
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -115,7 +121,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         upstream.connect((host, int(port)), start_tunnel)
 
 
-def run_proxy(port, start_ioloop=True):
+def run_proxy(start_ioloop=True):
     """
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
@@ -123,15 +129,30 @@ def run_proxy(port, start_ioloop=True):
     app = tornado.web.Application([
         (r'.*', ProxyHandler),
     ])
-    app.listen(port)
+    app.listen(options.port)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
         ioloop.start()
 
-if __name__ == '__main__':
-    port = 8888
-    if len(sys.argv) > 1:
-        port = int(sys.argv[1])
+def patch_ip_router():
+    old_socket = socket.socket
 
-    print ("Starting HTTP proxy on port %d" % port)
-    run_proxy(port)
+    def new_socket(*args, **kwargs):
+        from core import proxystate
+        sock = old_socket(*args, **kwargs)
+        try:
+            sock.bind((proxystate.thread_local.server_address[0], 0))
+        except AttributeError:
+            pass
+        return sock
+
+    socket.socket = new_socket
+
+
+
+if __name__ == '__main__':
+    parse_command_line()
+    if options.ip_router:
+        patch_ip_router()
+    logging.info("Starting HTTP proxy on port %d" % options.port)
+    run_proxy()
