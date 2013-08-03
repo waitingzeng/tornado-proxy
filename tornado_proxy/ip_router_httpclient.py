@@ -11,7 +11,7 @@ import ssl
 import sys
 
 
-class SimpleAsyncHTTPClient(simple_httpclient.AsyncHTTPClient):
+class SimpleAsyncHTTPClient(simple_httpclient.SimpleAsyncHTTPClient):
     def initialize(self, *args, **kwargs):
         self.source_address = kwargs.pop('source_address', None)
         super(SimpleAsyncHTTPClient, self).initialize(*args, **kwargs)
