@@ -28,6 +28,7 @@
 import sys
 import socket
 import logging
+import base64
 
 import tornado.httpserver
 import tornado.ioloop
@@ -41,10 +42,25 @@ __all__ = ['ProxyHandler', 'run_proxy']
 define('port', default=8080, type=int)
 define('addr', default='0.0.0.0', type=str)
 define('ip_router', default=False, type=bool)
+define('auth', default=None, type=str)
 
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT']
+
+    def prepare(self):
+        if not options.auth:
+            return
+        client_auth = self.request.headers.pop('Proxy-Authorization', None)
+        if client_auth:
+            proxy_auth = base64.b64decode(client_auth[6:])
+            if options.auth != proxy_auth:
+                logging.error('%s not match auth info', proxy_auth)
+            else:
+                return
+        else:
+            logging.error('not provier proxy auth')
+        return self.send_error(403)
 
     @tornado.web.asynchronous
     def get(self):
