@@ -103,7 +103,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             headers=self.request.headers, follow_redirects=False,
             allow_nonstandard_methods=True)
         if options.ip_router:
-            client = tornado.httpclient.AsyncHTTPClient(source_address=self.source_address)
+            client = tornado.httpclient.AsyncHTTPClient(source_address=self.source_address, force_instance=True)
         else:
             client = tornado.httpclient.AsyncHTTPClient()
         try:
