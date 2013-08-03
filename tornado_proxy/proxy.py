@@ -63,7 +63,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @property
     def source_address(self):
-        return self.request.connection.stream.socket.getsockname()[0]
+        return (self.request.connection.stream.socket.getsockname()[0], 0)
 
     def prepare(self):
         if not options.auth:
