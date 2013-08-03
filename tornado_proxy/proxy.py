@@ -48,6 +48,23 @@ define('auth', default=None, type=str)
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT']
 
+    def patch_ip_router():
+        old_socket = socket.socket
+
+        def new_socket(*args, **kwargs):
+            sock = old_socket(*args, **kwargs)
+            try:
+                sock.bind((self.request.connection.address[0], 0))
+            except AttributeError:
+                pass
+            return sock
+
+        socket.socket = new_socket
+
+    @property
+    def source_address(self):
+        return self.request.connection.stream.socket.getsockname()[0]
+
     def prepare(self):
         if not options.auth:
             return
@@ -64,7 +81,6 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-
         def handle_response(response):
             if response.error and not isinstance(response.error,
                     tornado.httpclient.HTTPError):
@@ -86,8 +102,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             method=self.request.method, body=self.request.body,
             headers=self.request.headers, follow_redirects=False,
             allow_nonstandard_methods=True)
-
-        client = tornado.httpclient.AsyncHTTPClient()
+        if options.ip_router:
+            client = tornado.httpclient.AsyncHTTPClient(source_address=self.source_address)
+        else:
+            client = tornado.httpclient.AsyncHTTPClient()
         try:
             client.fetch(req, handle_response)
         except tornado.httpclient.HTTPError as e:
@@ -133,6 +151,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        s.bind(self.source_address)
         upstream = tornado.iostream.IOStream(s)
         upstream.connect((host, int(port)), start_tunnel)
 
@@ -150,20 +169,10 @@ def run_proxy(start_ioloop=True):
     if start_ioloop:
         ioloop.start()
 
+
 def patch_ip_router():
-    old_socket = socket.socket
-
-    def new_socket(*args, **kwargs):
-        from core import proxystate
-        sock = old_socket(*args, **kwargs)
-        try:
-            sock.bind((proxystate.thread_local.server_address[0], 0))
-        except AttributeError:
-            pass
-        return sock
-
-    socket.socket = new_socket
-
+    from ip_router_httpclient import SimpleAsyncHTTPClient
+    tornado.httpclient.AsyncHTTPClient.configure(SimpleAsyncHTTPClient)
 
 
 if __name__ == '__main__':
